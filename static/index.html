@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Steadfast Lite — Resilient Job Processing</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --dead: #dc2626;
+      --dead-bg: #450a0a;
+      --info: #0ea5e9;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      --mono: "SF Mono", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: var(--font);
+      line-height: 1.5;
+      padding: 1.5rem;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .brand h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .brand p {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    /* Stuck jobs banner */
+    .stuck-banner {
+      padding: 0.45rem 0.9rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s ease;
+    }
+    .stuck-banner.alert-red {
+      background: #7f1d1d;
+      border-color: #ef4444;
+      color: #fecaca;
+      animation: pulseAlert 1.5s infinite;
+    }
+    @keyframes pulseAlert {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.75; }
+    }
+
+    /* Buttons */
+    button {
+      cursor: pointer;
+      font-family: var(--font);
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: none;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-danger { background: #b91c1c; color: #fff; }
+    .btn-danger:hover:not(:disabled) { background: #991b1b; }
+    .btn-secondary { background: #334155; color: var(--text-main); }
+    .btn-secondary:hover:not(:disabled) { background: #475569; }
+    .btn-success { background: #059669; color: #fff; }
+    .btn-success:hover:not(:disabled) { background: #047857; }
+    .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.78rem; }
+
+    /* Counter Cards */
+    .counters-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .counter-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1rem;
+      position: relative;
+    }
+    .counter-card .label {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+    .counter-card .val {
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .counter-queued .val { color: #60a5fa; }
+    .counter-running .val { color: #38bdf8; }
+    .counter-retry .val { color: #fbbf24; }
+    .counter-succeeded .val { color: #34d399; }
+    /* DEAD in Red */
+    .counter-dead {
+      border-color: #dc2626;
+      background: rgba(220, 38, 38, 0.08);
+    }
+    .counter-dead .val { color: #f87171; }
+    .counter-dead .label { color: #fca5a5; }
+
+    /* Tabs */
+    .nav-tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 1.25rem;
+    }
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      padding: 0.6rem 1rem;
+      color: var(--text-muted);
+      font-size: 0.92rem;
+    }
+    .tab-btn.active {
+      color: var(--text-main);
+      border-bottom-color: var(--primary);
+      font-weight: 700;
+    }
+    .tab-badge {
+      background: #334155;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+    }
+    .tab-badge.badge-dead {
+      background: #991b1b;
+      color: #fee2e2;
+    }
+
+    /* Layout grid */
+    .content-area {
+      display: grid;
+      gap: 1.5rem;
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* Tables */
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+    th {
+      background: #172033;
+      padding: 0.75rem 1rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--card-border);
+    }
+    td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #293548;
+    }
+    tr.clickable-row { cursor: pointer; transition: background 0.12s; }
+    tr.clickable-row:hover { background: #243047; }
+    tr.selected-row { background: #293855 !important; border-left: 3px solid var(--primary); }
+
+    /* Badges */
+    .status-badge {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-QUEUED { background: #1e3a8a; color: #93c5fd; }
+    .badge-RUNNING { background: #0369a1; color: #7dd3fc; animation: pulseBadge 1.2s infinite; }
+    .badge-RETRY_WAIT { background: #854d0e; color: #fde047; }
+    .badge-SUCCEEDED { background: #065f46; color: #6ee7b7; }
+    .badge-DEAD { background: #991b1b; color: #fca5a5; font-weight: 800; }
+
+    @keyframes pulseBadge {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.65; }
+    }
+
+    /* Modal / Drawer for Timeline */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 1.5rem;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      width: 100%;
+      max-width: 760px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .modal-body {
+      padding: 1.25rem;
+      overflow-y: auto;
+    }
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.4rem;
+      cursor: pointer;
+    }
+
+    /* Parcel Tracking Timeline */
+    .timeline {
+      position: relative;
+      margin-left: 1.5rem;
+      padding-left: 1.5rem;
+      border-left: 2px solid #334155;
+    }
+    .timeline-item {
+      position: relative;
+      margin-bottom: 1.25rem;
+    }
+    .timeline-item:last-child { margin-bottom: 0; }
+    .timeline-dot {
+      position: absolute;
+      left: -1.5rem;
+      top: 0.2rem;
+      transform: translateX(-50%);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #475569;
+      border: 2px solid var(--card-bg);
+    }
+    .dot-SUBMITTED { background: #60a5fa; }
+    .dot-QUEUED { background: #3b82f6; }
+    .dot-RUNNING { background: #38bdf8; }
+    .dot-FAILED_RETRYABLE { background: #f59e0b; }
+    .dot-RETRY_SCHEDULED { background: #fbbf24; }
+    .dot-FAILED_PERMANENT { background: #ef4444; }
+    .dot-DEAD { background: #dc2626; box-shadow: 0 0 8px #dc2626; }
+    .dot-PAYLOAD_EDITED { background: #a855f7; }
+    .dot-REPLAYED { background: #06b6d4; }
+    .dot-SUCCEEDED { background: #10b981; box-shadow: 0 0 8px #10b981; }
+
+    .timeline-content {
+      background: #172033;
+      border: 1px solid #293548;
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+    }
+    .timeline-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.35rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .timeline-detail {
+      font-size: 0.86rem;
+      color: #e2e8f0;
+      font-family: var(--mono);
+      word-break: break-all;
+    }
+
+    /* DLQ Repair Panel */
+    .dlq-grid {
+      display: grid;
+      gap: 1.25rem;
+    }
+    .dlq-card {
+      background: var(--card-bg);
+      border: 1px solid #7f1d1d;
+      border-left: 4px solid #dc2626;
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    .dlq-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 0.75rem;
+    }
+    .dlq-error-box {
+      background: #450a0a;
+      border: 1px solid #991b1b;
+      color: #fca5a5;
+      padding: 0.6rem 0.9rem;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-family: var(--mono);
+      margin-bottom: 1rem;
+    }
+    .dlq-payload-editor {
+      width: 100%;
+      min-height: 90px;
+      background: #090d16;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #38bdf8;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      padding: 0.75rem;
+      resize: vertical;
+      margin-bottom: 0.75rem;
+    }
+    .dlq-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      background: #1e293b;
+      border: 1px solid var(--primary);
+      color: var(--text-main);
+      padding: 0.75rem 1.25rem;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.25s ease;
+      z-index: 2000;
+    }
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .muted-text { color: var(--text-muted); font-size: 0.8rem; }
+    .mono { font-family: var(--mono); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <h1>⚡ Steadfast Lite</h1>
+      <p>Poison Job Containment (DLQ + Replay) &amp; Timeline Parcel-Tracking</p>
+    </div>
+    <div class="header-actions">
+      <div id="stuckBanner" class="stuck-banner">
+        <span>Stuck jobs:</span> <strong id="stuckCount">0</strong>
+      </div>
+      <button class="btn-primary" id="seedBtn" onclick="seedJobs()">🌱 Seed 30 mixed jobs</button>
+      <button class="btn-danger" id="poisonBtn" onclick="submitPoison()">🧪 Submit poison job</button>
+      <button class="btn-secondary btn-sm" id="pollToggleBtn" onclick="togglePolling()">⏸ Pause</button>
+    </div>
+  </header>
+
+  <!-- Counter Cards -->
+  <section class="counters-grid">
+    <div class="counter-card counter-queued">
+      <div class="label">Queued</div>
+      <div class="val" id="cntQueued">0</div>
+    </div>
+    <div class="counter-card counter-running">
+      <div class="label">Running</div>
+      <div class="val" id="cntRunning">0</div>
+    </div>
+    <div class="counter-card counter-retry">
+      <div class="label">Retry Wait</div>
+      <div class="val" id="cntRetry">0</div>
+    </div>
+    <div class="counter-card counter-succeeded">
+      <div class="label">Succeeded</div>
+      <div class="val" id="cntSucceeded">0</div>
+    </div>
+    <div class="counter-card counter-dead">
+      <div class="label">DEAD (DLQ)</div>
+      <div class="val" id="cntDead">0</div>
+    </div>
+  </section>
+
+  <!-- Navigation Tabs -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="switchTab('jobs')">
+      All Jobs <span class="tab-badge" id="badgeAllJobs">0</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('dlq')">
+      Dead-Letter Queue (DLQ) <span class="tab-badge badge-dead" id="badgeDlq">0</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('events')">
+      Live Event Stream (20 Latest)
+    </button>
+  </div>
+
+  <!-- Content Areas -->
+  <div class="content-area">
+
+    <!-- TAB 1: ALL JOBS -->
+    <div id="tab-jobs" class="tab-pane active">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Attempts</th>
+              <th>Payload Preview</th>
+              <th>Next Run / Error</th>
+              <th>Created</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="jobsTableBody">
+            <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading jobs...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 2: DLQ PANEL -->
+    <div id="tab-dlq" class="tab-pane">
+      <div id="dlqContainer" class="dlq-grid">
+        <div style="text-align: center; color: var(--text-muted); padding: 3rem; background: var(--card-bg); border-radius: 8px;">
+          No dead jobs currently in DLQ. All systems healthy!
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: LIVE EVENT STREAM -->
+    <div id="tab-events" class="tab-pane">
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Job ID</th>
+              <th>Event</th>
+              <th>Worker</th>
+              <th>Attempt</th>
+              <th>Detail</th>
+              <th>Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="eventsTableBody">
+            <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">Awaiting events...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Timeline Modal (Parcel-Tracking Style) -->
+  <div id="timelineModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <h3 id="modalJobTitle">Job Timeline</h3>
+          <span id="modalJobSubtitle" class="muted-text mono"></span>
+        </div>
+        <button class="close-btn" onclick="closeTimelineModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="modalTimeline" class="timeline">
+          <!-- Timeline entries rendered here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast">Notification</div>
+
+  <script>
+    let pollingActive = true;
+    let pollInterval = null;
+    let activeTimelineJobId = null;
+    let activeTab = 'jobs';
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.innerText = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    function togglePolling() {
+      pollingActive = !pollingActive;
+      const btn = document.getElementById('pollToggleBtn');
+      btn.innerText = pollingActive ? "⏸ Pause" : "▶ Resume";
+      if (pollingActive) {
+        pollData();
+        showToast("Polling resumed (every 1s)");
+      } else {
+        showToast("Polling paused");
+      }
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', ['jobs', 'dlq', 'events'][i] === tab);
+      });
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      document.getElementById('tab-' + tab).classList.add('active');
+      pollData();
+    }
+
+    function formatTime(ts) {
+      if (!ts) return "-";
+      const d = new Date(ts * 1000);
+      return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.' + Math.floor(d.getMilliseconds() / 100);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    async function pollData() {
+      if (!pollingActive) return;
+      try {
+        const [statsRes, jobsRes, dlqRes] = await Promise.all([
+          fetch('/stats'),
+          fetch('/jobs?limit=100'),
+          fetch('/dlq')
+        ]);
+
+        if (statsRes.ok) {
+          const stats = await statsRes.json();
+          renderStats(stats);
+        }
+
+        if (jobsRes.ok) {
+          const jobs = await jobsRes.json();
+          renderJobs(jobs);
+        }
+
+        if (dlqRes.ok) {
+          const dlq = await dlqRes.json();
+          renderDlq(dlq);
+        }
+
+        if (activeTimelineJobId) {
+          loadTimeline(activeTimelineJobId, false);
+        }
+      } catch (err) {
+        console.error("Poll error:", err);
+      }
+    }
+
+    function renderStats(stats) {
+      const counts = stats.counts || {};
+      document.getElementById('cntQueued').innerText = counts.QUEUED || 0;
+      document.getElementById('cntRunning').innerText = counts.RUNNING || 0;
+      document.getElementById('cntRetry').innerText = counts.RETRY_WAIT || 0;
+      document.getElementById('cntSucceeded').innerText = counts.SUCCEEDED || 0;
+      document.getElementById('cntDead').innerText = counts.DEAD || 0;
+
+      // Stuck jobs banner
+      const stuck = stats.stuck_jobs || 0;
+      const stuckElem = document.getElementById('stuckCount');
+      const banner = document.getElementById('stuckBanner');
+      stuckElem.innerText = stuck;
+      if (stuck > 0) {
+        banner.classList.add('alert-red');
+      } else {
+        banner.classList.remove('alert-red');
+      }
+
+      // Recent events in tab 3
+      if (stats.recent_events && stats.recent_events.length > 0) {
+        const tbody = document.getElementById('eventsTableBody');
+        tbody.innerHTML = stats.recent_events.map(ev => `
+          <tr>
+            <td class="mono muted-text">${ev.id}</td>
+            <td class="mono"><a href="javascript:void(0)" onclick="openTimeline('${ev.job_id}')" style="color: #60a5fa; text-decoration: none;">${ev.job_id}</a></td>
+            <td><span class="status-badge badge-${ev.event}">${ev.event}</span></td>
+            <td class="mono">${ev.worker_id || '-'}</td>
+            <td>${ev.attempt}</td>
+            <td class="mono" style="font-size: 0.8rem; color: #cbd5e1;">${escapeHtml(ev.detail || '-')}</td>
+            <td class="muted-text">${formatTime(ev.ts)}</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    function renderJobs(jobs) {
+      document.getElementById('badgeAllJobs').innerText = jobs.length;
+      const tbody = document.getElementById('jobsTableBody');
+      if (!jobs || jobs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">No jobs submitted yet. Click "Seed 30 mixed jobs" to start.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = jobs.map(j => {
+        let payloadPreview = j.payload;
+        try {
+          const parsed = JSON.parse(j.payload);
+          payloadPreview = JSON.stringify(parsed);
+        } catch (_) {}
+        if (payloadPreview.length > 32) payloadPreview = payloadPreview.substring(0, 32) + '...';
+
+        let extraInfo = '-';
+        if (j.status === 'DEAD' && j.last_error) {
+          extraInfo = `<span style="color: #f87171;" title="${escapeHtml(j.last_error)}">❌ ${escapeHtml(j.last_error.substring(0, 28))}</span>`;
+        } else if (j.status === 'RETRY_WAIT') {
+          const delay = Math.max(0, Math.round(j.next_run_at - Date.now() / 1000));
+          extraInfo = `<span style="color: #fbbf24;">⏳ In ${delay}s</span>`;
+        }
+
+        return `
+          <tr class="clickable-row ${activeTimelineJobId === j.id ? 'selected-row' : ''}" onclick="openTimeline('${j.id}')">
+            <td class="mono" style="font-weight: 600;">${j.id}</td>
+            <td class="mono">${j.type}</td>
+            <td><span class="status-badge badge-${j.status}">${j.status}</span></td>
+            <td>${j.attempts} / ${j.max_attempts}</td>
+            <td class="mono muted-text" title="${escapeHtml(j.payload)}">${escapeHtml(payloadPreview)}</td>
+            <td>${extraInfo}</td>
+            <td class="muted-text">${formatTime(j.created_at)}</td>
+            <td>
+              <button class="btn-secondary btn-sm" onclick="event.stopPropagation(); openTimeline('${j.id}')">🔍 Timeline</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderDlq(deadJobs) {
+      document.getElementById('badgeDlq').innerText = deadJobs.length;
+      const container = document.getElementById('dlqContainer');
+      if (!deadJobs || deadJobs.length === 0) {
+        container.innerHTML = `
+          <div style="text-align: center; color: var(--text-muted); padding: 3rem; background: var(--card-bg); border-radius: 8px;">
+            🎉 Dead-Letter Queue is empty. No poison jobs currently unresolved!
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = deadJobs.map(j => {
+        let formattedPayload = j.payload;
+        try {
+          formattedPayload = JSON.stringify(JSON.parse(j.payload), null, 2);
+        } catch (_) {}
+
+        return `
+          <div class="dlq-card" id="dlq-card-${j.id}">
+            <div class="dlq-header">
+              <div>
+                <strong class="mono" style="font-size: 1rem; color: #f87171;">${j.id}</strong>
+                <span class="muted-text mono" style="margin-left: 0.5rem;">[${j.type}]</span>
+                <span class="status-badge badge-DEAD" style="margin-left: 0.5rem;">DEAD</span>
+              </div>
+              <div class="muted-text">Failed Attempts: ${j.attempts} / ${j.max_attempts}</div>
+            </div>
+
+            <div class="dlq-error-box">
+              <strong>Error:</strong> ${escapeHtml(j.last_error || "Unknown error")}
+            </div>
+
+            <label class="muted-text" style="display:block; margin-bottom: 0.25rem;">Editable Payload (Repair &amp; Replay):</label>
+            <textarea class="dlq-payload-editor" id="payload-${j.id}">${escapeHtml(formattedPayload)}</textarea>
+
+            <div class="dlq-actions">
+              <button class="btn-secondary btn-sm" onclick="openTimeline('${j.id}')">🔍 View Timeline</button>
+              <button class="btn-primary btn-sm" onclick="savePayloadFix('${j.id}')">💾 Save Fix</button>
+              <button class="btn-success btn-sm" onclick="replayJob('${j.id}')">🔄 Replay Job</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function openTimeline(jobId) {
+      activeTimelineJobId = jobId;
+      document.getElementById('modalJobTitle').innerText = `Job Timeline: ${jobId}`;
+      document.getElementById('modalJobSubtitle').innerText = "Loading event parcel-tracking...";
+      document.getElementById('timelineModal').classList.add('open');
+      await loadTimeline(jobId, true);
+    }
+
+    function closeTimelineModal() {
+      activeTimelineJobId = null;
+      document.getElementById('timelineModal').classList.remove('open');
+    }
+
+    async function loadTimeline(jobId, showLoading = false) {
+      try {
+        const res = await fetch(`/jobs/${jobId}/timeline`);
+        if (!res.ok) return;
+        const events = await res.json();
+        
+        const container = document.getElementById('modalTimeline');
+        if (events.length === 0) {
+          container.innerHTML = `<p class="muted-text">No recorded events for this job.</p>`;
+          return;
+        }
+
+        document.getElementById('modalJobSubtitle').innerText = `${events.length} state transition events recorded`;
+
+        container.innerHTML = events.map(ev => `
+          <div class="timeline-item">
+            <div class="timeline-dot dot-${ev.event}"></div>
+            <div class="timeline-content">
+              <div class="timeline-meta">
+                <span>
+                  <strong class="status-badge badge-${ev.event}">${ev.event}</strong>
+                  <span class="mono" style="margin-left: 0.5rem;">Worker: ${ev.worker_id || 'system'}</span>
+                  <span style="margin-left: 0.5rem;">Attempt: ${ev.attempt}</span>
+                </span>
+                <span class="mono">${formatTime(ev.ts)}</span>
+              </div>
+              <div class="timeline-detail">${escapeHtml(ev.detail || '')}</div>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        console.error("Timeline error:", err);
+      }
+    }
+
+    async function savePayloadFix(jobId) {
+      const textarea = document.getElementById(`payload-${jobId}`);
+      let parsed;
+      try {
+        parsed = JSON.parse(textarea.value);
+      } catch (e) {
+        alert("Invalid JSON format in payload editor: " + e.message);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/jobs/${jobId}/payload`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ payload: parsed })
+        });
+        if (res.ok) {
+          showToast(`Saved payload fix for ${jobId}`);
+          pollData();
+        } else {
+          const err = await res.json();
+          alert("Error saving payload: " + (err.detail || "Unknown error"));
+        }
+      } catch (err) {
+        alert("Request failed: " + err);
+      }
+    }
+
+    async function replayJob(jobId) {
+      try {
+        const res = await fetch(`/jobs/${jobId}/replay`, { method: 'POST' });
+        if (res.ok) {
+          showToast(`Replaying ${jobId}! Enqueued for worker pickup.`);
+          pollData();
+        } else {
+          const err = await res.json();
+          alert("Error replaying job: " + (err.detail || "Unknown error"));
+        }
+      } catch (err) {
+        alert("Request failed: " + err);
+      }
+    }
+
+    async function seedJobs() {
+      const btn = document.getElementById('seedBtn');
+      btn.disabled = true;
+      btn.innerText = "⏳ Seeding 30 jobs...";
+      try {
+        const res = await fetch('/demo/seed', { method: 'POST' });
+        if (res.ok) {
+          showToast("Successfully seeded 30 mixed jobs!");
+          pollData();
+        }
+      } catch (err) {
+        alert("Failed to seed jobs: " + err);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "🌱 Seed 30 mixed jobs";
+      }
+    }
+
+    async function submitPoison() {
+      const btn = document.getElementById('poisonBtn');
+      btn.disabled = true;
+      btn.innerText = "⏳ Injecting...";
+      try {
+        const res = await fetch('/demo/poison', { method: 'POST' });
+        if (res.ok) {
+          const data = await res.json();
+          showToast(`Poison job injected (${data.job_id})!`);
+          pollData();
+        }
+      } catch (err) {
+        alert("Failed to inject poison job: " + err);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "🧪 Submit poison job";
+      }
+    }
+
+    // Start 1-second polling
+    pollData();
+    pollInterval = setInterval(pollData, 1000);
+  </script>
+</body>
+</html>
